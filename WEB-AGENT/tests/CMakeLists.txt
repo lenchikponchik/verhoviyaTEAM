@@ -1,0 +1,2 @@
+add_executable(test_environment test_environment.cpp)
+add_test(NAME EnvironmentTest COMMAND test_environment)

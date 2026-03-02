@@ -1,0 +1,5 @@
+{
+  "uid": "agent-001",
+  "server_url": "https://localhost:8080/api",
+  "poll_interval": 10
+}

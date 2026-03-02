@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install CMake
+        run: sudo apt-get install cmake
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          make
+      - name: Run tests
+        run: |
+          cd build
+          ctest
