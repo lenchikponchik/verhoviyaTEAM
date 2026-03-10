@@ -105,9 +105,3 @@ RESULT RESPONSE:
 ```
 WEB-AGENT/docs/technical_spec.md
 ```
-
----
-
-# Автор
-
-John Kuzenko
