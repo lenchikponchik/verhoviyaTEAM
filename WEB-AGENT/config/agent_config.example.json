@@ -1,5 +1,7 @@
 {
-  "uid": "agent-001",
-  "server_url": "https://localhost:8080/api",
-  "poll_interval": 10
+ "uid": "777",
+ "description": "web-agent",
+ "server": "xdev.arkcom.ru",
+ "port": 9999,
+ "interval": 5
 }
