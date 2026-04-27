@@ -7,7 +7,10 @@
 #include <future>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <set>
+#include <stdexcept>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -15,6 +18,22 @@ namespace fs = std::filesystem;
 using namespace web_agent;
 
 namespace {
+
+class SessionGuard {
+public:
+    SessionGuard(std::set<std::string> &active_sessions, std::mutex &mutex, std::string session_id)
+        : active_sessions_(active_sessions), mutex_(mutex), session_id_(std::move(session_id)) {}
+
+    ~SessionGuard() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        active_sessions_.erase(session_id_);
+    }
+
+private:
+    std::set<std::string> &active_sessions_;
+    std::mutex &mutex_;
+    std::string session_id_;
+};
 
 void prune_completed(
     std::vector<std::future<void>> &workers) {
@@ -30,6 +49,16 @@ void prune_completed(
 
 } // namespace
 
+#ifndef _WIN32
+void secure_directory_permissions(const fs::path &path) {
+    std::error_code ec;
+    fs::permissions(path, fs::perms::owner_all, fs::perm_options::replace, ec);
+    if (ec) {
+        throw std::runtime_error("cannot set secure permissions for directory: " + path.string());
+    }
+}
+#endif
+
 int main(int argc, char **argv) {
     try {
         const std::string config_path = argc > 1 ? argv[1] : "config/agent_config.json";
@@ -37,6 +66,10 @@ int main(int argc, char **argv) {
 
         fs::create_directories(config.task_directory);
         fs::create_directories(config.result_directory);
+#ifndef _WIN32
+        secure_directory_permissions(config.task_directory);
+        secure_directory_permissions(config.result_directory);
+#endif
 
         Logger logger(config.log_file);
         logger.info("agent startup, UID=" + config.uid);
@@ -68,7 +101,7 @@ int main(int argc, char **argv) {
             }
 
             try {
-                auto task = client.fetch_task();
+                std::optional<TaskInstruction> task = client.fetch_task();
                 if (!task.has_value()) {
                     logger.debug("no task available");
                     current_interval = config.poll_interval_sec;
@@ -94,6 +127,7 @@ int main(int argc, char **argv) {
                 logger.info("task received: session=" + task->session_id + ", type=" + task->task_code);
 
                 workers.push_back(std::async(std::launch::async, [&client, &logger, &config, &active_sessions, &active_sessions_mutex, task]() {
+                    SessionGuard session_guard(active_sessions, active_sessions_mutex, task->session_id);
                     try {
                         const ExecutionResult result = execute_task(
                             *task,
@@ -110,8 +144,6 @@ int main(int argc, char **argv) {
                         error_result.message = ex.what();
                         client.send_result(*task, error_result);
                     }
-                    std::lock_guard<std::mutex> lock(active_sessions_mutex);
-                    active_sessions.erase(task->session_id);
                 }));
 
                 current_interval = config.poll_interval_sec;

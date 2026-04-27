@@ -2,10 +2,12 @@
 
 #include <chrono>
 #include <ctime>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 
 namespace web_agent {
 
@@ -27,10 +29,24 @@ std::string timestamp_now() {
 
 } // namespace
 
-Logger::Logger(const std::string &path) : output_(path, std::ios::app) {
+Logger::Logger(const std::string &path) {
+    const std::filesystem::path log_path(path);
+    if (log_path.has_parent_path()) {
+        std::filesystem::create_directories(log_path.parent_path());
+    }
+
+    output_.open(log_path, std::ios::app);
     if (!output_) {
         throw std::runtime_error("cannot open log file: " + path);
     }
+#ifndef _WIN32
+    std::error_code ec;
+    std::filesystem::permissions(log_path, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+                                 std::filesystem::perm_options::replace, ec);
+    if (ec) {
+        throw std::runtime_error("cannot set secure permissions for log file: " + path);
+    }
+#endif
 }
 
 void Logger::info(const std::string &message) {
