@@ -1,7 +1,17 @@
 {
- "uid": "777",
- "description": "web-agent",
- "server": "xdev.arkcom.ru",
- "port": 9999,
- "interval": 5
+  "uid": "777",
+  "description": "web-agent",
+  "server_url": "https://xdev.arkcom.ru:9999",
+  "access_code": "PUT_REAL_ACCESS_CODE_HERE",
+  "poll_path": "/app/webagent1/api/wa_task/",
+  "result_path": "/app/webagent1/api/wa_result/",
+  "register_path": "/app/webagent1/api/wa_register/",
+  "poll_interval_sec": 5,
+  "request_timeout_sec": 15,
+  "max_parallel_tasks": 4,
+  "backoff_max_sec": 60,
+  "register_on_startup": true,
+  "task_directory": "./tasks",
+  "result_directory": "./results",
+  "log_file": "./agent.log"
 }

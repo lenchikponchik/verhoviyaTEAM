@@ -1,93 +1,129 @@
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-#include "httplib.h"
-#include <iostream>
-#include <thread>
+#include "api_client.h"
+#include "config.h"
+#include "logger.h"
+
 #include <chrono>
+#include <filesystem>
+#include <future>
+#include <iostream>
+#include <mutex>
+#include <set>
+#include <thread>
+#include <vector>
 
-int main() {
+namespace fs = std::filesystem;
+using namespace web_agent;
 
-    httplib::SSLClient cli("xdev.arkcom.ru", 9999);
+namespace {
 
-    std::string uid = "777";
-    std::string access_code = "e8725a-44a6-4a80-d26c-27dd5a84";
-
-    while (true) {
-
-        std::cout << "\nChecking task...\n";
-
-        std::string task_json =
-        "{"
-        "\"UID\":\"" + uid + "\","
-        "\"descr\":\"web-agent\","
-        "\"access_code\":\"" + access_code + "\""
-        "}";
-
-        auto task = cli.Post(
-            "/app/webagent1/api/wa_task/",
-            task_json,
-            "application/json"
-        );
-
-        if (!task) {
-            std::cout << "Task request error\n";
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-            continue;
+void prune_completed(
+    std::vector<std::future<void>> &workers) {
+    for (auto it = workers.begin(); it != workers.end();) {
+        if (it->wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            it->get();
+            it = workers.erase(it);
+        } else {
+            ++it;
         }
-
-        std::cout << "SERVER RESPONSE:\n" << task->body << std::endl;
-
-        if (task->body.find("\"status\":\"RUN\"") != std::string::npos) {
-
-            std::string session_id;
-
-            size_t pos = task->body.find("session_id");
-            if (pos != std::string::npos) {
-                size_t start = task->body.find("\"", pos + 12) + 1;
-                size_t end = task->body.find("\"", start);
-                session_id = task->body.substr(start, end - start);
-            }
-
-            std::cout << "SESSION: " << session_id << std::endl;
-
-            bool is_file = task->body.find("\"task_code\":\"FILE\"") != std::string::npos;
-
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-
-            int files_count = is_file ? 1 : 0;
-
-            std::string result_json =
-            "{"
-            "\"UID\":\"" + uid + "\","
-            "\"access_code\":\"" + access_code + "\","
-            "\"message\":\"task completed\","
-            "\"files\":" + std::to_string(files_count) + ","
-            "\"session_id\":\"" + session_id + "\""
-            "}";
-
-            httplib::UploadFormDataItems items;
-
-            items.push_back({ "result_code", "0", "", "" });
-            items.push_back({ "result", result_json, "", "" });
-
-            if (is_file) {
-                items.push_back({ "file1", "example file content", "result.txt", "text/plain" });
-            }
-
-            auto res = cli.Post(
-                "/app/webagent1/api/wa_result/",
-                items
-            );
-
-            if (res)
-                std::cout << "RESULT RESPONSE:\n" << res->body << std::endl;
-            else
-                std::cout << "Result send error\n";
-
-            std::cout << "Task completed\n";
-        }
-
-        std::this_thread::sleep_for(std::chrono::seconds(5));
     }
+}
 
-    return 0;
+} // namespace
+
+int main(int argc, char **argv) {
+    try {
+        const std::string config_path = argc > 1 ? argv[1] : "config/agent_config.json";
+        AgentConfig config = load_config(config_path);
+
+        fs::create_directories(config.task_directory);
+        fs::create_directories(config.result_directory);
+
+        Logger logger(config.log_file);
+        logger.info("agent startup, UID=" + config.uid);
+
+        ApiClient client(config, logger);
+        if (!client.probe_server()) {
+            logger.error("server is unavailable on startup");
+        }
+
+        if (config.register_on_startup || config.access_code.empty()) {
+            if (!client.register_agent()) {
+                logger.error("agent registration failed and no usable access_code available");
+                return 1;
+            }
+        }
+
+        std::vector<std::future<void>> workers;
+        std::set<std::string> active_sessions;
+        std::mutex active_sessions_mutex;
+        int current_interval = config.poll_interval_sec;
+
+        while (true) {
+            prune_completed(workers);
+
+            if (static_cast<int>(workers.size()) >= config.max_parallel_tasks) {
+                logger.debug("max parallel tasks reached, waiting for free slot");
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                continue;
+            }
+
+            try {
+                auto task = client.fetch_task();
+                if (!task.has_value()) {
+                    logger.debug("no task available");
+                    current_interval = config.poll_interval_sec;
+                    std::this_thread::sleep_for(std::chrono::seconds(current_interval));
+                    continue;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(active_sessions_mutex);
+                    if (active_sessions.find(task->session_id) != active_sessions.end()) {
+                        logger.error("duplicate session skipped: " + task->session_id);
+                        task.reset();
+                    } else {
+                        active_sessions.insert(task->session_id);
+                    }
+                }
+
+                if (!task.has_value()) {
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    continue;
+                }
+
+                logger.info("task received: session=" + task->session_id + ", type=" + task->task_code);
+
+                workers.push_back(std::async(std::launch::async, [&client, &logger, &config, &active_sessions, &active_sessions_mutex, task]() {
+                    try {
+                        const ExecutionResult result = execute_task(
+                            *task,
+                            fs::path(config.task_directory),
+                            fs::path(config.result_directory));
+                        logger.info("task finished: session=" + task->session_id + ", code=" + std::to_string(result.result_code));
+                        if (!client.send_result(*task, result)) {
+                            logger.error("failed to deliver result for session " + task->session_id);
+                        }
+                    } catch (const std::exception &ex) {
+                        logger.error("task execution failed for session " + task->session_id + ": " + ex.what());
+                        ExecutionResult error_result;
+                        error_result.result_code = -1;
+                        error_result.message = ex.what();
+                        client.send_result(*task, error_result);
+                    }
+                    std::lock_guard<std::mutex> lock(active_sessions_mutex);
+                    active_sessions.erase(task->session_id);
+                }));
+
+                current_interval = config.poll_interval_sec;
+            } catch (const std::exception &ex) {
+                logger.error(std::string("polling error: ") + ex.what());
+                current_interval = std::min(current_interval * 2, config.backoff_max_sec);
+            }
+
+            std::this_thread::sleep_for(std::chrono::seconds(current_interval));
+        }
+    } catch (const std::exception &ex) {
+        std::cerr << "Fatal error: " << ex.what() << std::endl;
+        return 1;
+    }
 }
