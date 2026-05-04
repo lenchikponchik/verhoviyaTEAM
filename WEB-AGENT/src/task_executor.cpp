@@ -227,6 +227,14 @@ std::string win_quote(const std::string &value) {
 }
 #endif
 
+std::string command_argument_quote(const std::string &value) {
+#ifdef _WIN32
+    return win_quote(value);
+#else
+    return shell_escape(value);
+#endif
+}
+
 int normalize_exit_code(int status) {
 #ifdef _WIN32
     return status;
@@ -318,6 +326,38 @@ std::vector<fs::path> wait_for_generated_files(
     return files;
 }
 
+std::string json_arguments(const JsonValue::object &obj, const std::vector<std::string> &keys) {
+    for (const auto &key : keys) {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            continue;
+        }
+
+        const std::string scalar = json_scalar_string(it->second);
+        if (!scalar.empty()) {
+            return scalar;
+        }
+
+        if (!it->second.is_array()) {
+            continue;
+        }
+
+        std::string joined;
+        for (const auto &entry : it->second.as_array()) {
+            const std::string value = json_scalar_string(entry);
+            if (value.empty()) {
+                continue;
+            }
+            if (!joined.empty()) {
+                joined.push_back(' ');
+            }
+            joined += command_argument_quote(value);
+        }
+        return joined;
+    }
+    return {};
+}
+
 void append_unique(std::vector<std::string> &target, const std::vector<std::string> &items) {
     for (const auto &item : items) {
         if (std::find(target.begin(), target.end(), item) == target.end()) {
@@ -338,9 +378,10 @@ void apply_task_fields(TaskInstruction &task, const JsonValue::object &obj, cons
     }
 
     const std::string executable = json_string(obj, {"program", "executable", "file", "path"});
-    const std::string arguments = json_string(obj, {"arguments", "args", "params"});
-    if (task.command.empty() && !executable.empty()) {
-        task.command = shell_escape(executable);
+    const std::string arguments = json_arguments(obj, {"arguments", "args", "params"});
+    const bool uses_executable_option = task.command.empty() && !executable.empty();
+    if (uses_executable_option) {
+        task.command = command_argument_quote(executable);
         if (!arguments.empty()) {
             task.command += " " + arguments;
         }
@@ -353,7 +394,11 @@ void apply_task_fields(TaskInstruction &task, const JsonValue::object &obj, cons
         task.working_directory = default_result_dir.string();
     }
 
-    append_unique(task.result_files, json_string_list(obj, {"result_files", "files", "file"}));
+    std::vector<std::string> result_file_keys{"result_files", "files"};
+    if (!uses_executable_option) {
+        result_file_keys.push_back("file");
+    }
+    append_unique(task.result_files, json_string_list(obj, result_file_keys));
     task.result_wait_timeout_sec = json_int(obj, {"result_wait_timeout_sec", "result_timeout_sec", "timeout_sec"}, task.result_wait_timeout_sec);
 }
 

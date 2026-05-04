@@ -10,12 +10,25 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 #include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
 using namespace web_agent;
+
+#ifndef WEB_AGENT_DEFAULT_CONFIG
+#define WEB_AGENT_DEFAULT_CONFIG "config/agent_config.json"
+#endif
+
+#ifndef WEB_AGENT_VERSION
+#define WEB_AGENT_VERSION "dev"
+#endif
+
+#ifndef WEB_AGENT_PLATFORM
+#define WEB_AGENT_PLATFORM "unknown-platform"
+#endif
 
 namespace {
 
@@ -47,6 +60,60 @@ void prune_completed(
     }
 }
 
+struct CommandLineOptions {
+    std::string config_path = WEB_AGENT_DEFAULT_CONFIG;
+    bool show_help = false;
+    bool show_version = false;
+};
+
+void print_usage(const char *program_name) {
+    std::cout << "Usage: " << program_name << " [--config <file>] [--version]" << std::endl;
+    std::cout << "       " << program_name << " <config-file>" << std::endl;
+}
+
+CommandLineOptions parse_command_line(int argc, char **argv) {
+    CommandLineOptions options;
+    bool config_was_set = false;
+
+    for (int index = 1; index < argc; ++index) {
+        const std::string arg = argv[index];
+        if (arg == "--help" || arg == "-h") {
+            options.show_help = true;
+            continue;
+        }
+        if (arg == "--version") {
+            options.show_version = true;
+            continue;
+        }
+        if (arg == "--config" || arg == "-c") {
+            if (index + 1 >= argc) {
+                throw std::runtime_error("missing file path after " + arg);
+            }
+            options.config_path = argv[++index];
+            config_was_set = true;
+            continue;
+        }
+        if (arg.rfind("--config=", 0) == 0) {
+            options.config_path = arg.substr(std::string("--config=").size());
+            if (options.config_path.empty()) {
+                throw std::runtime_error("--config requires a non-empty file path");
+            }
+            config_was_set = true;
+            continue;
+        }
+        if (!arg.empty() && arg.front() == '-') {
+            throw std::runtime_error("unknown option: " + arg);
+        }
+        if (config_was_set) {
+            throw std::runtime_error("config file is specified more than once");
+        }
+        options.config_path = arg;
+        config_was_set = true;
+    }
+
+    return options;
+}
+
 } // namespace
 
 #ifndef _WIN32
@@ -61,7 +128,17 @@ void secure_directory_permissions(const fs::path &path) {
 
 int main(int argc, char **argv) {
     try {
-        const std::string config_path = argc > 1 ? argv[1] : "config/agent_config.json";
+        const CommandLineOptions cli = parse_command_line(argc, argv);
+        if (cli.show_help) {
+            print_usage(argv[0]);
+            return 0;
+        }
+        if (cli.show_version) {
+            std::cout << "web-agent " << WEB_AGENT_VERSION << " (" << WEB_AGENT_PLATFORM << ")" << std::endl;
+            return 0;
+        }
+
+        const std::string config_path = cli.config_path;
         AgentConfig config = load_config(config_path);
 
         fs::create_directories(config.task_directory);

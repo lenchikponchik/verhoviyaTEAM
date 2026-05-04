@@ -1,6 +1,8 @@
 #pragma once
 
+#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
 #define CPPHTTPLIB_OPENSSL_SUPPORT
+#endif
 #include "httplib.h"
 
 #include "config.h"
@@ -9,6 +11,7 @@
 #include "task_executor.h"
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -31,6 +34,7 @@ private:
     AgentConfig config_;
     Logger &logger_;
     std::unique_ptr<httplib::Client> client_;
+    std::mutex client_mutex_;
     std::string access_code_;
 };
 

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/web-agent/options.schema.json",
+  "title": "WEB-AGENT task options",
+  "description": "Schema for the server task options field. The API may send options either as a shell command string or as an object with an executable file, arguments, working directory and expected result files.",
+  "oneOf": [
+    {
+      "type": "string",
+      "description": "Shell command executed in the task working directory. If the string starts with JSON object syntax, the agent parses it as an object first."
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string", "description": "Full shell command." },
+        "cmd": { "type": "string", "description": "Alias for command." },
+        "task_cmd": { "type": "string", "description": "Alias for command." },
+        "task_command": { "type": "string", "description": "Alias for command." },
+        "program": { "type": "string", "description": "Executable/script path." },
+        "executable": { "type": "string", "description": "Executable/script path." },
+        "file": { "type": "string", "description": "Executable/script file path. This is the file-receiving option." },
+        "path": { "type": "string", "description": "Executable/script path." },
+        "arguments": { "$ref": "#/$defs/arguments" },
+        "args": { "$ref": "#/$defs/arguments" },
+        "params": { "$ref": "#/$defs/arguments" },
+        "working_directory": { "type": "string", "description": "Relative working directory inside result_directory." },
+        "workdir": { "type": "string", "description": "Alias for working_directory." },
+        "cwd": { "type": "string", "description": "Alias for working_directory." },
+        "result_files": { "$ref": "#/$defs/fileList" },
+        "files": { "$ref": "#/$defs/fileList" },
+        "file1": { "type": "string", "description": "Expected result file 1." },
+        "file2": { "type": "string", "description": "Expected result file 2." },
+        "file3": { "type": "string", "description": "Expected result file 3." },
+        "result_wait_timeout_sec": { "type": "integer", "minimum": 0 },
+        "result_timeout_sec": { "type": "integer", "minimum": 0 },
+        "timeout_sec": { "type": "integer", "minimum": 0 }
+      },
+      "patternProperties": { "^file[0-9]+$": { "type": "string", "description": "Expected numbered result file." } },
+      "anyOf": [
+        { "required": ["command"] },
+        { "required": ["cmd"] },
+        { "required": ["task_cmd"] },
+        { "required": ["task_command"] },
+        { "required": ["program"] },
+        { "required": ["executable"] },
+        { "required": ["file"] },
+        { "required": ["path"] },
+        { "required": ["result_files"] },
+        { "required": ["files"] },
+        { "required": ["file1"] }
+      ]
+    }
+  ],
+  "$defs": {
+    "arguments": {
+      "oneOf": [
+        { "type": "string", "description": "Raw argument string appended as-is." },
+        {
+          "type": "array",
+          "description": "Argument array. The agent quotes every element for the current OS shell.",
+          "items": { "type": ["string", "number", "boolean"] }
+        }
+      ]
+    },
+    "fileList": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      ]
+    }
+  }
+}

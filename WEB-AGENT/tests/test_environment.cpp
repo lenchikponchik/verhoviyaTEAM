@@ -108,7 +108,7 @@ int main() {
           "status":"RUN",
           "session_id":"session-task",
           "task_code":"TASK",
-          "command":"printf 'task-ok'",
+          "command":"echo task-ok",
           "result_wait_timeout_sec":0
         })");
         const fs::path root = fs::temp_directory_path() / "web_agent_task_mode_test";
@@ -127,7 +127,7 @@ int main() {
           "status":"RUN",
           "session_id":"session-options",
           "task_code":"CONF",
-          "options":"printf 'ok' > generated.txt",
+          "options":"echo ok>generated.txt",
           "result_files":["generated.txt"],
           "result_wait_timeout_sec":0
         })");
@@ -135,7 +135,7 @@ int main() {
         fs::create_directories(root / "tasks");
         fs::create_directories(root / "results");
         const TaskInstruction task = parse_task_instruction(task_json, root / "results");
-        assert(task.command == "printf 'ok' > generated.txt");
+        assert(task.command == "echo ok>generated.txt");
         const ExecutionResult result = execute_task(task, root / "tasks", root / "results");
         assert(result.result_code == 0);
         assert(result.files.size() == 1);
@@ -144,10 +144,51 @@ int main() {
 
     {
         const JsonValue task_json = JsonValue::parse(R"({
+          "task_id":"task-42",
+          "status":"RUN",
+          "session_id":"session-file-option",
+          "task_code":"TASK",
+          "options":{
+            "file":"tool with space.exe",
+            "args":["--input","source file.txt"],
+            "result_files":["out.txt"]
+          }
+        })");
+        const fs::path root = fs::temp_directory_path() / "web_agent_file_option_test";
+        fs::create_directories(root / "results");
+        const TaskInstruction task = parse_task_instruction(task_json, root / "results");
+        assert(task.task_id == "task-42");
+#ifdef _WIN32
+        assert(task.command == "\"tool with space.exe\" \"--input\" \"source file.txt\"");
+#else
+        assert(task.command == "'tool with space.exe' '--input' 'source file.txt'");
+#endif
+        assert(task.result_files.size() == 1);
+        const JsonValue no_result_files_json = JsonValue::parse(R"({
+          "status":"RUN",
+          "session_id":"session-file-option-no-results",
+          "task_code":"TASK",
+          "options":{"file":"tool.exe"}
+        })");
+        const TaskInstruction no_result_files_task = parse_task_instruction(no_result_files_json, root / "results");
+        assert(no_result_files_task.result_files.empty());
+        const JsonValue command_file_json = JsonValue::parse(R"({
+          "status":"RUN",
+          "session_id":"session-command-file-result",
+          "task_code":"TASK",
+          "command":"echo ok",
+          "file":"out.txt"
+        })");
+        const TaskInstruction command_file_task = parse_task_instruction(command_file_json, root / "results");
+        assert(command_file_task.result_files.size() == 1);
+        fs::remove_all(root);
+    }
+    {
+        const JsonValue task_json = JsonValue::parse(R"({
           "status":"RUN",
           "session_id":"session-1",
           "task_code":"FILE",
-          "command":"printf 'ok' > generated.txt",
+          "command":"echo ok>generated.txt",
           "result_files":["generated.txt"],
           "result_wait_timeout_sec":0
         })");
@@ -167,7 +208,7 @@ int main() {
           "status":"RUN",
           "session_id":"session-relative",
           "task_code":"TASK",
-          "command":"printf 'ok'",
+          "command":"echo ok",
           "result_wait_timeout_sec":0
         })");
         const fs::path root = fs::temp_directory_path() / "web_agent_relative_path_test";
@@ -221,7 +262,7 @@ int main() {
           "status":"RUN",
           "session_id":"session-unsafe-workdir",
           "task_code":"TASK",
-          "command":"printf 'ok'",
+          "command":"echo ok",
           "working_directory":"../outside",
           "result_wait_timeout_sec":0
         })");

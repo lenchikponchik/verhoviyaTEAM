@@ -1,0 +1,21 @@
+[Unit]
+Description=WEB-AGENT
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=web-agent
+Group=web-agent
+WorkingDirectory=/var/lib/web-agent
+ExecStart=/usr/local/bin/web-agent --config /etc/web-agent/agent_config.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/web-agent
+
+[Install]
+WantedBy=multi-user.target

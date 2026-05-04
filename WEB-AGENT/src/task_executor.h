@@ -9,6 +9,7 @@
 namespace web_agent {
 
 struct TaskInstruction {
+    std::string task_id;
     std::string session_id;
     std::string task_code;
     std::string command;

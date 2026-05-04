@@ -1,5 +1,13 @@
 # verhoviyaTEAM
 
-В репозитории реализован `WEB-AGENT` на C++17 для работы с Web API: агент опрашивает сервер, исполняет локальные задания, собирает текстовый результат и файлы, затем отправляет итог обратно.
+В репозитории реализован `WEB-AGENT` на C++17 для работы с Web API: агент опрашивает сервер, получает инструкции, выполняет локальные задания, собирает текстовый результат и файлы, затем отправляет итог обратно.
 
-Актуальная точка входа и документация находятся в каталоге [WEB-AGENT](/home/cry/CLionProjects/verhoviyaTEAM/WEB-AGENT). Основные инструкции по конфигу и запуску описаны в [WEB-AGENT/README.md](/home/cry/CLionProjects/verhoviyaTEAM/WEB-AGENT/README.md), технические заметки и ограничения стенда зафиксированы в [WEB-AGENT/docs/technical_spec.md](/home/cry/CLionProjects/verhoviyaTEAM/WEB-AGENT/docs/technical_spec.md).
+Основная точка входа находится в [WEB-AGENT](WEB-AGENT). Инструкции по конфигу, сборке и запуску описаны в [WEB-AGENT/README.md](WEB-AGENT/README.md).
+
+Что закрыто по замечаниям:
+
+* CMake-опции для тестов, install/CPack, strict warnings, FILEPATH-конфига и имени платформенного пакета.
+* Формальная JSON Schema для `options`: [WEB-AGENT/docs/options.schema.json](WEB-AGENT/docs/options.schema.json).
+* Разные сборки для Windows/Linux/macOS через CPack-архивы; на Windows получается `web-agent.exe`.
+* Опция `options.file`, принимающая исполняемый файл/скрипт и аргументы.
+* Документация по деплою и скачиваемым архивам: [WEB-AGENT/docs/deploy.md](WEB-AGENT/docs/deploy.md).
