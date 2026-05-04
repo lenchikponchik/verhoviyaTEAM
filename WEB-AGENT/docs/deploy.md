@@ -54,3 +54,19 @@ web-agent --config /path/to/agent_config.json
 ```bash
 web-agent /path/to/agent_config.json
 ```
+## Автоматическая сборка на GitHub
+
+В репозитории есть workflow [.github/workflows/build-packages.yml](../../.github/workflows/build-packages.yml). Он собирает готовые архивы для трех платформ:
+
+* `web-agent-Windows-x64` - ZIP с `bin/web-agent.exe`.
+* `web-agent-Linux-x86_64` - tar.gz с `bin/web-agent`.
+* `web-agent-macOS` - tar.gz с `bin/web-agent` для runner macOS.
+
+Где скачать после push:
+
+1. Открой GitHub-репозиторий.
+2. Перейди во вкладку `Actions`.
+3. Открой последний workflow `Build WEB-AGENT packages`.
+4. Внизу страницы скачай нужный artifact.
+
+Workflow также можно запустить вручную через `Actions` -> `Build WEB-AGENT packages` -> `Run workflow`.

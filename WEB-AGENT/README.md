@@ -16,6 +16,7 @@ WEB-AGENT — фоновый C++17-агент, который опрашивае
 * параллельное выполнение нескольких задач
 * backoff при сетевых ошибках
 * кроссплатформенная сборка Windows/Linux/macOS и CPack-архивы для скачивания
+* GitHub Actions собирает готовые artifacts: Windows .exe, Linux и macOS бинарники
 
 ## Конфиг
 
@@ -37,7 +38,17 @@ WEB-AGENT — фоновый C++17-агент, который опрашивае
 
 Для production не храните секретный `access_code` в файле: оставьте поле пустым и задавайте секрет через `WEB_AGENT_ACCESS_CODE`.
 
-## Сборка
+## Готовые сборки
+
+После push на GitHub автоматически запускается workflow [Build WEB-AGENT packages](../.github/workflows/build-packages.yml). Готовые архивы лежат во вкладке `Actions` внизу страницы успешного запуска workflow:
+
+* `web-agent-Windows-x64` — ZIP-архив, внутри `bin/web-agent.exe`.
+* `web-agent-Linux-x86_64` — tar.gz-архив, внутри `bin/web-agent`.
+* `web-agent-macOS` — tar.gz-архив, внутри `bin/web-agent`.
+
+Для ручного запуска workflow на GitHub открой `Actions` → `Build WEB-AGENT packages` → `Run workflow`.
+
+## Сборка из исходников
 
 Нужны CMake, C++17-компилятор и OpenSSL development package.
 
@@ -68,13 +79,64 @@ cpack --config build/CPackConfig.cmake
 
 Подробности деплоя и скачиваемых архивов описаны в [docs/deploy.md](docs/deploy.md).
 
-## Запуск
+## Запуск на Windows
 
-```bash
-web-agent --config config/agent_config.json
+Если скачан готовый artifact `web-agent-Windows-x64`, распакуй ZIP и запусти `.exe` из PowerShell:
+
+```powershell
+cd C:\path\to\web-agent
+.\bin\web-agent.exe --config .\config\agent_config.json
 ```
 
-Также работает старый формат:
+Если проект собран локально через CMake:
+
+```powershell
+cd C:\Users\leosp\CLionProjects\verhoviyaTEAM\WEB-AGENT
+.\build\Release\web-agent.exe --config .\config\agent_config.json
+```
+
+Для фонового запуска как Windows service используй шаблон [deploy/windows/install-service.ps1](deploy/windows/install-service.ps1) после сборки или распаковки архива.
+
+## Запуск на Linux
+
+Если скачан artifact `web-agent-Linux-x86_64`, распакуй архив и дай бинарнику право на запуск:
+
+```bash
+tar -xzf web-agent-1.0.0-Linux-x86_64.tar.gz
+chmod +x bin/web-agent
+./bin/web-agent --config ./config/agent_config.json
+```
+
+Если проект собран локально:
+
+```bash
+cd WEB-AGENT
+./build/web-agent --config ./config/agent_config.json
+```
+
+Для фонового запуска используй systemd-шаблон [deploy/systemd/web-agent.service](deploy/systemd/web-agent.service).
+
+## Запуск на macOS
+
+Если скачан artifact `web-agent-macOS`, распакуй архив и разреши запуск бинарника:
+
+```bash
+tar -xzf web-agent-1.0.0-macOS.tar.gz
+chmod +x bin/web-agent
+./bin/web-agent --config ./config/agent_config.json
+```
+
+Если macOS блокирует бинарник из-за quarantine-флага, удали флаг:
+
+```bash
+xattr -d com.apple.quarantine ./bin/web-agent
+```
+
+Для фонового запуска используй launchd-шаблон [deploy/launchd/ru.web-agent.plist](deploy/launchd/ru.web-agent.plist).
+
+## Общие команды запуска
+
+Старый позиционный формат тоже поддерживается:
 
 ```bash
 web-agent config/agent_config.json

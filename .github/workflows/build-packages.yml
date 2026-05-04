@@ -1,0 +1,96 @@
+name: Build WEB-AGENT packages
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            platform: Windows-x64
+            artifact_ext: zip
+          - name: Linux x64
+            os: ubuntu-latest
+            platform: Linux-x86_64
+            artifact_ext: tar.gz
+          - name: macOS
+            os: macos-latest
+            platform: macOS
+            artifact_ext: tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OpenSSL on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev
+
+      - name: Install OpenSSL on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install openssl@3
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+
+      - name: Install OpenSSL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $vcpkgRoot) { $vcpkgRoot = 'C:\vcpkg' }
+          & "$vcpkgRoot\vcpkg.exe" install openssl:x64-windows
+          "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_TARGET_TRIPLET=x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Configure on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S WEB-AGENT -B WEB-AGENT/build -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE" `
+            -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET" `
+            -DWEB_AGENT_BUILD_TESTS=ON `
+            -DWEB_AGENT_PACKAGE_PLATFORM=${{ matrix.platform }}
+
+      - name: Configure on Unix
+        if: runner.os != 'Windows'
+        run: |
+          extra_args=()
+          if [ -n "${OPENSSL_ROOT_DIR:-}" ]; then
+            extra_args+=("-DOPENSSL_ROOT_DIR=$OPENSSL_ROOT_DIR")
+          fi
+          cmake -S WEB-AGENT -B WEB-AGENT/build \
+            -DWEB_AGENT_BUILD_TESTS=ON \
+            -DWEB_AGENT_PACKAGE_PLATFORM=${{ matrix.platform }} \
+            "${extra_args[@]}"
+
+      - name: Build
+        run: cmake --build WEB-AGENT/build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir WEB-AGENT/build --build-config Release --output-on-failure
+
+      - name: Package
+        run: cpack --config WEB-AGENT/build/CPackConfig.cmake -C Release -B WEB-AGENT/dist
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-agent-${{ matrix.platform }}
+          path: WEB-AGENT/dist/*.${{ matrix.artifact_ext }}
+          if-no-files-found: error

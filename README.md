@@ -11,3 +11,6 @@
 * Разные сборки для Windows/Linux/macOS через CPack-архивы; на Windows получается `web-agent.exe`.
 * Опция `options.file`, принимающая исполняемый файл/скрипт и аргументы.
 * Документация по деплою и скачиваемым архивам: [WEB-AGENT/docs/deploy.md](WEB-AGENT/docs/deploy.md).
+## Запуск на разных платформах
+
+Подробные инструкции для Windows `.exe`, Linux и macOS находятся в [WEB-AGENT/README.md](WEB-AGENT/README.md). Готовые архивы собираются через GitHub Actions во вкладке `Actions`.
